@@ -10,16 +10,12 @@ from torch_geometric.utils import one_hot, scatter
 from tqdm import tqdm
 import yaml
 
-from etnn.lifter import Lifter, get_adjacency_types
-from etnn.qm9.lifts.registry import LIFTER_REGISTRY
-from etnn.lifter import CombinatorialComplexTransform
-
 from Bio.PDB import PDBParser, DSSP
 import numpy as np
 
-class ProteinCombinatorialComplexDataset(InMemoryDataset):
+class ProteinTopologicalObjectDataset(InMemoryDataset):
     """
-    Dataset for building a combinatorial complex from protein structures.
+    Dataset for building a topological object from protein structures.
     The first layer consists of residues, and the second layer consists of secondary structures.
     """
 
