@@ -7,6 +7,7 @@ from torch_geometric.nn import global_add_pool
 from layers import TopologicalGNNLayer
 from etnn import utils, invariants
 
+
 class TopologicalGNN(nn.Module):
     """
     The Topological Graph Neural Network (TopologicalGNN) model.
