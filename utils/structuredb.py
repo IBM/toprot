@@ -43,7 +43,6 @@ class StructureDB:
                                 if 'model' not in x else x,
                                 protein_list)
         os.makedirs(data_dir, exist_ok=True)
-        self.foldseek = self._check_foldseek()
         self.foldcomp = self._check_foldcomp()
 
         if not os.path.exists(self.db_path):
@@ -113,6 +112,7 @@ class StructureDB:
         threads: int = 10,
         batch_size: int = 4096
     ) -> pd.DataFrame:
+        self.foldseek = self._check_foldseek()
         if data_dir is None:
             data_dir = self.data_dir
 
