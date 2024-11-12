@@ -17,10 +17,12 @@ class Protein:
     def __init__(
         self,
         data: pd.DataFrame,
-        coords: np.ndarray
+        coords: np.ndarray,
+        text: Optional[str] = None
     ):
         self.data = data
         self.coords = coords
+        self.text = text
 
     @classmethod
     def _read_pdb(self, pdb_txt: str):
@@ -44,7 +46,8 @@ class Protein:
             proto_coords.append(
                 [float(line[30:38]), float(line[38:46]), float(line[46:54])]
             )
-        return Protein(pd.DataFrame(proto_data), np.array(proto_coords))
+        return Protein(pd.DataFrame(proto_data), np.array(proto_coords),
+                       pdb_txt)
 
     def get_c_alpha(self) -> np.ndarray:
         indxs = self.data['atom_name'] == 'CA'
