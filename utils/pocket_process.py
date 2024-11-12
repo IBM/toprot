@@ -91,8 +91,9 @@ class FPocket:
             raise ImportError('Please install the Fpocket program. ' +
                               '`conda install fpocket -c conda-forge`')
 
-    def get_pockets(self, pdb_path: str, pdb_df: PandasPdb, tmp_dir: str,
-                    threshold: Optional[float] = 0.) -> List[np.ndarray]:
+    def get_pockets(self, pdb_path: str, tmp_dir: str,
+                    threshold: Optional[float] = 0.,
+                    k: Optional[int] = 10) -> List[np.ndarray]:
         pdb_path = osp.abspath(pdb_path)
         new_pdb_path = osp.join(
             tmp_dir, osp.basename(pdb_path)
@@ -101,7 +102,8 @@ class FPocket:
         out_dir = osp.abspath(osp.join(
             tmp_dir, osp.basename(pdb_path).strip('.pdb') + "_out"
         ))
-        shutil.copyfile(pdb_path, new_pdb_path)
+        if pdb_path != osp.abspath(new_pdb_path):
+            shutil.copyfile(pdb_path, new_pdb_path)
         process = sbp.Popen(
             [self.program, '-f', new_pdb_path],
             stdout=sbp.PIPE, stderr=sbp.PIPE
@@ -116,33 +118,21 @@ class FPocket:
         scores_path = os.path.join(out_dir, f'{pdb_id}_info.txt')
 
         df = _get_pockets(pockets_path)
+        if len(df) == 0:
+            return None, None
         df = _get_centers(df)
         df = _get_properties(scores_path, df)
         df = df[df.Score > threshold].reset_index(drop=True)
-        df = df.sort_values(by='Score', ascending=False)
-        pocket_properties = {
-            int(r.pocket): r.iloc[4:].tolist() for _, r in df.iterrows()
-        }
-        pocket_residues = _get_residues(residues_path, df)
-        pdb_df = pdb_df[pdb_df["atom_name"] == 'CA']
-        output_res = []
-        for _, res_df in pdb_df.iterrows():
-            res_pockets = []
-            for pocket, residues in enumerate(pocket_residues):
-                for res in residues:
-                    if ((res_df.residue_name == res[0]) &
-                            (res_df.residue_number == res[1]) &
-                            (res_df.chain_id == res[2])):
-                        res_pockets.append(pocket)
-            if len(res_pockets) == 1:
-                output_res.append(res_pockets[0])
-            elif len(res_pockets) > 1:
-                output_res.append(res_pockets)
-            else:
-                output_res.append(-1)
+        df = df.sort_values(by='Score', ascending=False).reset_index()
+        if k is not None:
+            num_pockets = k if k < len(df) else len(df)
+        else:
+            num_pockets = len(df)
 
-        shutil.rmtree(out_dir)
-        return output_res, pocket_properties
+        pocket_properties = [df.iloc[i, 5:].to_numpy()
+                             for i in range(num_pockets)]
+        pocket_residues = _get_residues(residues_path, df)
+        return pocket_residues, pocket_properties
 
 
 if __name__ == '__main__':

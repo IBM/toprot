@@ -6,57 +6,9 @@ from typing import List, Optional, Tuple
 import time
 import foldcomp
 import pandas as pd
-import numpy as np
 from tqdm import tqdm
-from autopeptideml.data.residues import RESIDUES
 
-RESIDUES_TO_ONE = {v: k for k, v in RESIDUES.items()}
-
-
-class Protein:
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        coords: np.ndarray,
-        text: Optional[str] = None
-    ):
-        self.data = data
-        self.coords = coords
-        self.text = text
-
-    @classmethod
-    def _read_pdb(self, pdb_txt: str):
-        proto_data = []
-        proto_coords = []
-        for line in pdb_txt.split('\n'):
-            if not line.startswith('ATOM'):
-                continue
-            if line[76:78].strip() == 'H':
-                continue
-            proto_data.append(
-                {
-                    'atom_number': int(line[6:11]),
-                    'atom_name': line[12:16].strip(),
-                    'residue_name': RESIDUES_TO_ONE[line[17:20]],
-                    'residue_number': int(line[22:26]),
-                    'chain_id': line[21:22].strip(),
-                    'element_symbol': line[76:78].strip()
-                }
-            )
-            proto_coords.append(
-                [float(line[30:38]), float(line[38:46]), float(line[46:54])]
-            )
-        return Protein(pd.DataFrame(proto_data), np.array(proto_coords),
-                       pdb_txt)
-
-    def get_c_alpha(self) -> np.ndarray:
-        indxs = self.data['atom_name'] == 'CA'
-        return indxs
-
-    def get_sequence(self) -> str:
-        indxs = self.get_c_alpha()
-        seq = ''.join(self.data[indxs]['residue_name'].tolist())
-        return seq
+from protein_class import Protein
 
 
 class StructureDB:
@@ -135,7 +87,6 @@ class StructureDB:
         protein_list: List[str] = None,
     ) -> Tuple[List[str], List[Protein]]:
         if data_dir is None:
-
             data_dir = self.data_dir
 
         if protein_list is not None:
@@ -147,13 +98,13 @@ class StructureDB:
         else:
             db = foldcomp.open(self.db_path)
 
-        output = []
-        names = []
+        names, prots = [], []
         for (name, pdb) in tqdm(db):
             prot = Protein._read_pdb(pdb)
             names.append(name)
-            output.append(prot)
-        return name, output
+            prots.append(prot)
+        db.close()
+        return names, prots
 
     def get_3di_tokens(
         self,
@@ -261,6 +212,14 @@ class StructureDB:
         os.remove(tmp_save_path + '.dbtype')
         return data
 
+    def get_names(self) -> List[str]:
+        db = foldcomp.open(self.db_path)
+        names = []
+        for (name, pdb) in tqdm(db):
+            names.append(name)
+        db.close()
+        return names
+
     def __len__(self):
         return len(self.df)
 
@@ -280,5 +239,43 @@ class StructureDB:
 
 
 if __name__ == '__main__':
+    import pickle
     db = StructureDB(data_dir='db_data', db_name='afdb_swissprot_v4')
-    prots = db.get_3d_structure()
+    # names = db.get_names()
+    # pickle.dump(names, open('afdb_sp_v4_names.pckl', 'wb'))
+    names = pickle.load(open('afdb_sp_v4_names.pckl', 'rb'))
+    batch_size = 8192
+    names = [n.strip('.pdb') for n in names]
+
+    # for batch, idx in enumerate(range(0, len(names), batch_size)):
+    #     print('Computing batch: ', batch, ' out of: ',
+    #           (len(names) // batch_size) + 1)
+    #     try:
+    #         batch_names = names[idx:(idx+batch_size)]
+    #     except KeyError:
+    #         batch_names = names[idx:-1]
+    #     batch_names, prots = db.get_3d_structure(protein_list=batch_names)
+    #     output = {n: p for n, p in zip(batch_names, prots)}
+    #     pickle.dump(output, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+    def get_ss(prot):
+        prot.get_ss()
+        return prot
+
+    from pqdm.threads import pqdm
+
+    for batch, idx in enumerate(range(0, len(names), batch_size)):
+        data = pickle.load(open(f'afdb_sp_v4_prots/{batch}.pckl', 'rb'))
+        print('Computing batch: ', batch, ' out of: ',
+              (len(names) // batch_size) + 1)
+
+        prots = pqdm(list(data.values()), get_ss, n_jobs=10,
+                     exception_behaviour='immediate')
+        for idx, n in enumerate(data.keys()):
+            data[n] = prots[idx]
+
+        # for n, prot in tqdm(data.items()):
+        #     prot.get_ss()
+        #     data[n] = prot
+        # batch_names, prots = db.get_3d_structure(protein_list=batch_names)
+        # output = {n: p for n, p in zip(batch_names, prots)}
+        pickle.dump(data, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
