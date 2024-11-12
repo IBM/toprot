@@ -11,60 +11,7 @@ from tqdm import tqdm
 from autopeptideml.data.residues import RESIDUES
 
 RESIDUES_TO_ONE = {v: k for k, v in RESIDUES.items()}
-#  {
-#         "id": "atom_number",
-#         "line": [6, 11],
-#         "type": int,
-#         "strf": lambda x: "%+5s" % str(x),
-#     },
-    # {
-    #     "id": "atom_name",
-    #     "line": [12, 16],
-    #     "type": str,
-    #     "strf": lambda x: (" %-3s" % x if len(x) < 4 else "%-4s" % x),
-    # },
-#     {
-#         "id": "residue_name",
-#         "line": [17, 20],
-#         "type": str,
-#         "strf": lambda x: "%+3s" % x,
-#     },
-#     {
-#         "id": "chain_id",
-#         "line": [21, 22],
-#         "type": str,
-#         "strf": lambda x: "%-1s" % x,
-#     },
-#     {
-#         "id": "residue_number",
-#         "line": [22, 26],
-#         "type": int,
-#         "strf": lambda x: "%+4s" % str(x),
-#     },
-#    {
-#         "id": "x_coord",
-#         "line": [30, 38],
-#         "type": float,
-#         "strf": lambda x: ("%+8.3f" % x).replace("+", " "),
-#     },
-#     {
-#         "id": "y_coord",
-#         "line": [38, 46],
-#         "type": float,
-#         "strf": lambda x: ("%+8.3f" % x).replace("+", " "),
-#     },
-#     {
-#         "id": "z_coord",
-#         "line": [46, 54],
-#         "type": float,
-#         "strf": lambda x: ("%+8.3f" % x).replace("+", " "),
-#     },
-    # {
-    #     "id": "element_symbol",
-    #     "line": [76, 78],
-    #     "type": str,
-    #     "strf": lambda x: "%+2s" % x,
-    # },
+
 
 class Protein:
     def __init__(
