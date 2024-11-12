@@ -130,7 +130,7 @@ class StructureDB:
         self,
         data_dir: Optional[str] = None,
         protein_list: List[str] = None,
-    ) -> pd.DataFrame:
+    ) -> Tuple[List[str], List[Protein]]:
         if data_dir is None:
 
             data_dir = self.data_dir
@@ -145,10 +145,12 @@ class StructureDB:
             db = foldcomp.open(self.db_path)
 
         output = []
+        names = []
         for (name, pdb) in tqdm(db):
             prot = Protein._read_pdb(pdb)
+            names.append(name)
             output.append(prot)
-        return output
+        return name, output
 
     def get_3di_tokens(
         self,
@@ -276,4 +278,4 @@ class StructureDB:
 
 if __name__ == '__main__':
     db = StructureDB(data_dir='db_data', db_name='afdb_swissprot_v4')
-    db.get_3d_structure()
+    prots = db.get_3d_structure()
