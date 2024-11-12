@@ -43,7 +43,7 @@ class StructureDB:
                                 if 'model' not in x else x,
                                 protein_list)
         os.makedirs(data_dir, exist_ok=True)
-        self.foldcomp = self._check_foldcomp()
+        # self.foldcomp = self._check_foldcomp()
 
         if not os.path.exists(self.db_path):
             print(f'Downloading Foldcomp DB: {db_name}')
