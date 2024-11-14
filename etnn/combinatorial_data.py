@@ -11,7 +11,7 @@ from torch_geometric.data import Data
 Cell = tuple[frozenset[int], tuple[float]]
 
 
-class TopologicalObject(Data):
+class CombinatorialComplexData(Data):
     """
     A subclass of PyTorch Geometric's Data class designed for representing combinatorial complexes.
 
@@ -199,6 +199,8 @@ class TopologicalObject(Data):
         """
         attr = {}
 
+
+        print(list(data.items()))
         for key, value in data.items():
             if any(key.startswith(s) for s in ["pos", "y"]):
                 attr[key] = torch.tensor(value)

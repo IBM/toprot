@@ -13,9 +13,14 @@ import yaml
 from Bio.PDB import PDBParser, DSSP
 import numpy as np
 
-class ProteinTopologicalObjectDataset(InMemoryDataset):
+from etnn.lifter import Lifter, get_adjacency_types
+from etnn.prot.lifts.registry import LIFTER_REGISTRY
+from etnn.lifter import CombinatorialComplexTransform
+
+
+class ProtCC(InMemoryDataset):
     """
-    Dataset for building a topological object from protein structures.
+    Dataset for building a CC from protein structures.
     The first layer consists of residues, and the second layer consists of secondary structures.
     """
 
@@ -38,7 +43,7 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
         self.pdb_dir = pdb_dir  # Directory containing PDB files
 
         # Initialize lifter and adjacencies
-        self.dim = 2  # Two layers: residues and secondary structures
+        self.dim = len(self.lifters) - 1  # Two layers: residues and secondary structures
         self.adjacencies = get_adjacency_types(
             self.dim,
             connectivity,
@@ -49,13 +54,15 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
         super().__init__(
             root, transform, pre_transform, pre_filter, force_reload=force_reload
         )
-        self.data, self.slices = torch.load(self.processed_paths[0])
+
+        self.load(self.processed_paths[0])
 
     @property
     def raw_file_names(self) -> List[str]:
         # Include 'pdb_ids.txt' as a required raw file
-        pdb_ids_file = 'pdb_ids.txt'
+        # pdb_ids_file = 'pdb_ids.txt'
         pdb_files = [f for f in os.listdir(self.pdb_dir) if f.endswith('.pdb')]
+        return pdb_files
         return [pdb_ids_file] + pdb_files
     
 
@@ -91,7 +98,15 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
         
         for pdb_id in tqdm(pdb_ids, desc="Downloading PDB files"):
             try:
+                print(f"Downloading PDB ID {pdb_id.upper()}...")
                 downloaded_path = pdbl.retrieve_pdb_file(pdb_id, pdir=self.pdb_dir, file_format='pdb')
+                print(downloaded_path)
+                # Rename .ent files to .pdb
+                if downloaded_path.endswith('.ent'):
+                    new_path = downloaded_path.replace('.ent', '.pdb')
+                    os.rename(downloaded_path, new_path)
+                    downloaded_path = new_path
+                
                 if downloaded_path.endswith('.gz'):
                     with gzip.open(downloaded_path, 'rb') as f_in:
                         with open(osp.join(self.pdb_dir, f"{pdb_id}.pdb"), 'wb') as f_out:
@@ -99,16 +114,96 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
                     os.remove(downloaded_path) 
             except Exception as e:
                 print(f"Failed to download PDB ID {pdb_id.upper()}: {e}", file=sys.stderr)
+    
+    
+    def group_ss_elements(self, dssp_data, target_ss_list=['H', 'E', 'C']):
+        """
+        Groups residues into secondary structure (SS) elements based on each target SS code,
+        keeping only the residue indices and filtering to keep only the largest supersets.
+
+        Parameters:
+            dssp_data (list): List of DSSP tuples.
+            target_ss_list (list): List of SS codes to group (e.g., ['H', 'E', 'C']).
+
+        Returns:
+            dict: Dictionary where keys are SS codes and values are lists of SS elements,
+                each as a list of residue indices, with overlapping subsets removed.
+        """
+        ss_elements_dict = {ss_code: [] for ss_code in target_ss_list}
+
+        for target_ss in target_ss_list:
+            current_element = []
+            current_chain = None
+            last_residue_number = None
+            for entry in dssp_data:
+                chain_id, residue_id, aa, ss, *rest = entry
+                residue_index = residue_id[1]  # Extract residue index
+                if ss == target_ss:
+                    if not current_element:
+                        # Start of a new SS element
+                        current_element = [residue_index]
+                        current_chain = chain_id
+                        last_residue_number = residue_index
+                    else:
+                        # Check if current residue is contiguous with the last residue in current_element
+                        if (chain_id == current_chain) and (residue_index == last_residue_number + 1):
+                            current_element.append(residue_index)
+                            last_residue_number = residue_index
+                        else:
+                            # Non-contiguous; save the current element and start a new one
+                            ss_elements_dict[target_ss].append(current_element)
+                            current_element = [residue_index]
+                            current_chain = chain_id
+                            last_residue_number = residue_index
+                else:
+                    if current_element:
+                        # End of current SS element
+                        ss_elements_dict[target_ss].append(current_element)
+                        current_element = []
+                        current_chain = None
+                        last_residue_number = None
+            # Append any remaining SS element
+            if current_element:
+                ss_elements_dict[target_ss].append(current_element)
+
+            # Filter overlapping subsets, keeping only the largest supersets
+            ss_elements_dict[target_ss] = self.filter_supersets(ss_elements_dict[target_ss])
+
+        return ss_elements_dict
+
+    def filter_supersets(self, elements):
+        """
+        Filters a list of lists to keep only the largest supersets in case of overlap.
+
+        Parameters:
+            elements (list of list of int): List of lists, where each sublist represents an SS element.
+
+        Returns:
+            list of list of int: Filtered list with only the largest supersets.
+        """
+        elements = sorted(elements, key=len, reverse=True)
+        filtered_elements = []
+
+        for elem in elements:
+            # Add element only if it is not a subset of any already included element
+            if not any(set(elem).issubset(set(super_elem)) for super_elem in filtered_elements):
+                filtered_elements.append(elem)
+
+        return filtered_elements
 
 
     def process(self) -> None:
         parser = PDBParser(QUIET=True)
         data_list = []
 
+        print(self.raw_file_names)
+
         for pdb_file in tqdm(self.raw_file_names, desc="Processing PDB files"):
             pdb_path = osp.join(self.pdb_dir, pdb_file)
             structure = parser.get_structure(pdb_file, pdb_path)
-
+            print(pdb_path)
+            print(pdb_file)
+            print(structure)
             # Use the first model
             model = structure[0]
 
@@ -122,13 +217,15 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
             residues = []
             ss_labels = []
             coords = []
+            dssp_data = []
             for chain in model:
                 for residue in chain:
                     if residue.id[0] != ' ':  # Skip hetero residues
                         continue
                     resname = residue.get_resname()
                     residues.append(resname)
-                    ss = dssp.get((chain.id, residue.id))
+                    ss = dssp[(chain.id, residue.id[1])]
+                    print(ss)
                     if ss is None:
                         ss_label = 'C'  # Coil as default
                     else:
@@ -141,25 +238,23 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
                     else:
                         coords.append([0.0, 0.0, 0.0])  # Placeholder
 
+                    # Append to dssp_data for grouping
+                    dssp_data.append((chain.id, residue.id, resname, ss_label))
+            
             if not residues:
                 continue  # Skip if no valid residues
 
             num_residues = len(residues)
             pos = torch.tensor(coords, dtype=torch.float)
+            
+            # Group secondary structure elements for all types
+            ss_elements = self.group_ss_elements(dssp_data)
 
             # Encode residue types
             residue_features = self.get_residue_features(residues)
-            x1 = residue_features
-
-            # Encode secondary structures
-            ss_features = self.get_secondary_structure_features(ss_labels)
-            x2 = ss_features
-
-            # Combine features
-            x = torch.cat([x1, x2], dim=-1)
+            x = residue_features
 
             # Create edge_index based on spatial proximity (e.g., within 8 Å)
-            # You can customize this as needed
             threshold = 8.0
             distances = torch.cdist(pos, pos, p=2)
             edge_index = (distances < threshold).nonzero(as_tuple=False).t()
@@ -176,8 +271,11 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
                 edge_attr=edge_attr,
                 y=y,
                 pdb_id=pdb_file.replace('.pdb', ''),
+                residues=residues,
+                ss_elements=ss_elements,
+                mol=0,
             )
-
+        
             # Apply combinatorial complex transformation
             data = CombinatorialComplexTransform(
                 lifter=self.lifter,
@@ -268,66 +366,8 @@ class ProteinTopologicalObjectDataset(InMemoryDataset):
 
         return residue_features
 
-    def get_secondary_structure_features(self, ss_labels: List[str]) -> Tensor:
-        """
-        Extract features for secondary structures.
-
-        Parameters:
-            ss_labels (List[str]): List of secondary structure labels.
-
-        Returns:
-            Tensor: One-hot encoded secondary structure types concatenated with structural properties.
-        """
-        # Define secondary structure types
-        ss_types = ['H', 'E', 'C']  # Helix, Sheet, Coil
-        ss_type_dict = {ss: i for i, ss in enumerate(ss_types)}
-        num_ss_types = len(ss_types)
-
-        # Encode secondary structure labels
-        ss_indices = [ss_type_dict.get(ss, 2) for ss in ss_labels]  # Default to 'C' if unknown
-        ss_one_hot = one_hot(torch.tensor(ss_indices), num_classes=num_ss_types).float()
-
-        # Define structural properties for secondary structures (for now dummy values)
-        # We may want to include properties like hydrogen bonding propensity, flexibility, solvent accessibility
-        structural_properties = {
-            'H': [1.0, 0.0, 0.5],  # Helix: High hydrogen bonding, low flexibility, moderate solvent accessibility
-            'E': [0.8, 0.2, 0.4],  # Sheet: High hydrogen bonding, slightly more flexible
-            'C': [0.0, 1.0, 0.9]   # Coil: No hydrogen bonding, high flexibility, high solvent accessibility
-        }
-
-        structural_feats = []
-        for ss in ss_labels:
-            props = structural_properties.get(ss, structural_properties['C'])
-            structural_feats.append(props)
-        structural_feats = torch.tensor(structural_feats, dtype=torch.float)
-
-        # Concatenate one-hot and structural properties
-        ss_features = torch.cat([ss_one_hot, structural_feats], dim=-1)
-
-        return ss_features
-    
 
 
-from torch_geometric.loader import DataLoader
 
-# Define parameters
-root = './data/proteins'
-pdb_dir = './data/pdb_files'  
-lifters = ['residue', 'secondary_structure']
-neighbor_types = ['spatial']  
-connectivity = 'full' 
 
-# Initialize dataset
-dataset = ProteinCombinatorialComplexDataset(
-    root=root,
-    lifters=lifters,
-    neighbor_types=neighbor_types,
-    connectivity=connectivity,
-    pdb_dir=pdb_dir,
-    force_reload=False
-)
 
-loader = DataLoader(dataset, batch_size=32, shuffle=True)
-for batch in loader:
-    print(batch)
-   
