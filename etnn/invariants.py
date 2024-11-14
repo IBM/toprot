@@ -1,3 +1,9 @@
+"""
+This module has been taken from https://github.com/NSAPH-Projects/topological-equivariant-networks,
+and it follows the implementation of the ETNN (Equivariant Topological Neural Networks) model.
+"""
+
+
 from copy import deepcopy
 from dataclasses import dataclass
 import numba

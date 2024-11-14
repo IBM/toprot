@@ -1,3 +1,5 @@
+# Testing module for showing how to load the data from the dataset
+
 from torch_geometric.loader import DataLoader
 import etnn.prot
 from etnn.prot.protcc import ProtCC

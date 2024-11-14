@@ -1,3 +1,9 @@
+"""
+This module has been taken from https://github.com/NSAPH-Projects/topological-equivariant-networks,
+and it follows the implementation of the ETNN (Equivariant Topological Neural Networks) model.
+"""
+
+
 from collections import defaultdict
 from functools import partial
 from typing import DefaultDict, Iterable
