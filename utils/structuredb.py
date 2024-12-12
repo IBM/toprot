@@ -247,16 +247,16 @@ if __name__ == '__main__':
     batch_size = 8_192
     names = [n.strip('.pdb') for n in names]
 
-    for batch, idx in enumerate(range(0, len(names), batch_size)):
-        print('Computing batch: ', batch, ' out of: ',
-              (len(names) // batch_size) + 1)
-        try:
-            batch_names = names[idx:(idx+batch_size)]
-        except KeyError:
-            batch_names = names[idx:-1]
-        batch_names, prots = db.get_3d_structure(protein_list=batch_names)
-        output = {n: p for n, p in zip(batch_names, prots)}
-        pickle.dump(output, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+    # for batch, idx in enumerate(range(0, len(names), batch_size)):
+    #     print('Computing batch: ', batch, ' out of: ',
+    #           (len(names) // batch_size) + 1)
+    #     try:
+    #         batch_names = names[idx:(idx+batch_size)]
+    #     except KeyError:
+    #         batch_names = names[idx:-1]
+    #     batch_names, prots = db.get_3d_structure(protein_list=batch_names)
+    #     output = {n: p for n, p in zip(batch_names, prots)}
+        # pickle.dump(output, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
 
     def get_ss(prot):
         prot.get_ss()
