@@ -238,36 +238,57 @@ class StructureDB:
         return item
 
 
-if __name__ == '__main__':
-    import pickle
-    db = StructureDB(data_dir='db_data', db_name='afdb_swissprot_v4')
-    # names = db.get_names()
-    # pickle.dump(names, open('afdb_sp_v4_names.pckl', 'wb'))
-    names = pickle.load(open('afdb_sp_v4_names.pckl', 'rb'))
-    batch_size = 8_192
-    names = [n.strip('.pdb') for n in names]
+def process_db(
+    batch_idx: Optional[int] = None,
+    batch_size: Optional[int] = 8_192,
+):
 
-    # for batch, idx in enumerate(range(0, len(names), batch_size)):
-    #     print('Computing batch: ', batch, ' out of: ',
-    #           (len(names) // batch_size) + 1)
-    #     try:
-    #         batch_names = names[idx:(idx+batch_size)]
-    #     except KeyError:
-    #         batch_names = names[idx:-1]
-    #     batch_names, prots = db.get_3d_structure(protein_list=batch_names)
-    #     output = {n: p for n, p in zip(batch_names, prots)}
-        # pickle.dump(output, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+    from pqdm.threads import pqdm
+    from multiprocessing import cpu_count
 
     def get_ss(prot):
         prot.get_ss()
         return prot
 
-    from pqdm.threads import pqdm
-    from multiprocessing import cpu_count
+    import pickle
+    if os.path.exists('afdb_sp_v4_names.pckl'):
+        names = pickle.load(open('afdb_sp_v4_names.pckl', 'rb'))
+    else:
+        db = StructureDB(data_dir='db_data', db_name='afdb_swissprot_v4')
+        names = db.get_names()
+        pickle.dump(names, open('afdb_sp_v4_names.pckl', 'wb'))
 
     for batch, idx in enumerate(range(0, len(names), batch_size)):
-        data = pickle.load(open(f'afdb_sp_v4_prots/{batch}.pckl', 'rb'))
+        if os.path.exists(f'afdb_sp_v4_prots/{batch}.pckl'):
+            continue
         print('Computing batch: ', batch, ' out of: ',
+              (len(names) // batch_size) + 1)
+        try:
+            batch_names = names[idx:(idx+batch_size)]
+        except KeyError:
+            batch_names = names[idx:-1]
+        batch_names, prots = db.get_3d_structure(protein_list=batch_names)
+        output = {n: p for n, p in zip(batch_names, prots)}
+        pickle.dump(output, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+
+    names = [n.strip('.pdb') for n in names]
+    if batch_idx is None:
+        for batch, idx in enumerate(range(0, len(names), batch_size)):
+            data = pickle.load(open(f'afdb_sp_v4_prots/{batch}.pckl', 'rb'))
+            print('Computing batch: ', batch, ' out of: ',
+                  (len(names) // batch_size) + 1)
+            if data[list(data.keys())[0]].ss is None:
+                prots = pqdm(list(data.values()), get_ss, n_jobs=cpu_count(),
+                             exception_behaviour='immediate')
+                for idx, n in enumerate(data.keys()):
+                    data[n] = prots[idx]
+            else:
+                continue
+            pickle.dump(data, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+
+    else:
+        data = pickle.load(open(f'afdb_sp_v4_prots/{batch_idx}.pckl', 'rb'))
+        print('Computing batch: ', batch_idx, ' out of: ',
               (len(names) // batch_size) + 1)
         if data[list(data.keys())[0]].ss is None:
             prots = pqdm(list(data.values()), get_ss, n_jobs=cpu_count(),
@@ -275,5 +296,10 @@ if __name__ == '__main__':
             for idx, n in enumerate(data.keys()):
                 data[n] = prots[idx]
         else:
-            continue
+            pass
         pickle.dump(data, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+
+
+if __name__ == '__main__':
+    import typer
+    typer.run(process_db)
