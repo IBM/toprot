@@ -88,7 +88,7 @@ class Protein:
         return np.array(ss).astype(np.int8)
 
     def get_pockets(self, fpocket: Optional[FPocket] = None,
-                    threshold: Optional[float] = 0.1,
+                    threshold: Optional[float] = 0.0,
                     k: Optional[int] = None,
                     tmp_dir: Optional[str] = 'tmp') -> Tuple[List[np.ndarray], np.ndarray]:
         df = self.data[self.get_c_alpha()]

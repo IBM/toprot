@@ -250,6 +250,10 @@ def process_db(
         prot.get_ss()
         return prot
 
+    def get_pockets(prot):
+        prot.get_pockets()
+        return prot
+
     import pickle
     if os.path.exists('afdb_sp_v4_names.pckl'):
         names = pickle.load(open('afdb_sp_v4_names.pckl', 'rb'))
@@ -299,6 +303,32 @@ def process_db(
             pass
         pickle.dump(data, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
 
+    if batch_idx is None:
+        for batch, idx in enumerate(range(0, len(names), batch_size)):
+            data = pickle.load(open(f'afdb_sp_v4_prots/{batch}.pckl', 'rb'))
+            print('Computing batch: ', batch, ' out of: ',
+                  (len(names) // batch_size) + 1)
+            if data[list(data.keys())[0]].ss is None:
+                prots = pqdm(list(data.values()), get_pockets, n_jobs=cpu_count(),
+                             exception_behaviour='immediate')
+                for idx, n in enumerate(data.keys()):
+                    data[n] = prots[idx]
+            else:
+                continue
+            pickle.dump(data, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
+
+    else:
+        data = pickle.load(open(f'afdb_sp_v4_prots/{batch_idx}.pckl', 'rb'))
+        print('Computing batch: ', batch_idx, ' out of: ',
+              (len(names) // batch_size) + 1)
+        if data[list(data.keys())[0]].pockets is None:
+            prots = pqdm(list(data.values()), get_pockets, n_jobs=cpu_count(),
+                         exception_behaviour='immediate')
+            for idx, n in enumerate(data.keys()):
+                data[n] = prots[idx]
+        else:
+            pass
+        pickle.dump(data, open(f'afdb_sp_v4_prots/{batch}.pckl', 'wb'))
 
 if __name__ == '__main__':
     import typer
