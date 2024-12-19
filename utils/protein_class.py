@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 
 from autopeptideml.data.residues import RESIDUES
-from ss_process import DSSP
-from pocket_process import FPocket
+from .ss_process import DSSP
+from .pocket_process import FPocket
 
 RESIDUES_TO_ONE = {v: k for k, v in RESIDUES.items()}
 
