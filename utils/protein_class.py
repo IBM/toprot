@@ -119,5 +119,5 @@ class Protein:
                 ) for res in pocket]) for pocket in pckt_res]
             self.pockets = pckt_res
             self.pocket_features = pckt_props
-
+        os.remove(pdb_path)
         return pckt_res, pckt_props

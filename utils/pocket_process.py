@@ -132,6 +132,7 @@ class FPocket:
         pocket_properties = [df.iloc[i, 5:].to_numpy()
                              for i in range(num_pockets)]
         pocket_residues = _get_residues(residues_path, df)
+        shutil.rmtree(out_dir)
         return pocket_residues, pocket_properties
 
 
