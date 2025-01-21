@@ -6,7 +6,9 @@ from typing import List, Optional, Tuple
 
 import time
 import foldcomp
+import numpy as np
 import pandas as pd
+import polars as pl
 from tqdm import tqdm
 
 from .protein_class import Protein
@@ -351,6 +353,64 @@ def process_db(
             pass
         pickle.dump(data, open(f'afdb_sp_v4_prots/{batch_idx}.pckl', 'wb'))
 
+    print("Assigning predicted domains")
+    df = pl.read_csv('ted_100_188m.chainsaw.filtered.tsv.gz',
+                     separator='\t', has_header=False,
+                     new_columns=["ID", "MD5 Hash", 'n_res', 'n_domains',
+                                  "domain_boundaries", "pred_probability"])
+
+    if batch_idx is None:
+        for batch, idx in enumerate(range(0, len(names), batch_size)):
+            data = pickle.load(open(f'afdb_sp_v4_prots/{batch}.pckl', 'rb'))
+            print('Computing batch: ', batch, ' out of: ',
+                  (len(names) // batch_size) + 1)
+            try:
+                batch_names = names[idx:(idx+batch_size)]
+            except KeyError:
+                batch_names = names[idx:-1]
+            mini_df = df.filter(pl.col('ID').str.contains_any(batch_names))
+            print(len(mini_df))
+            name2domains = {x["ID"]: x["domain_boundaries"]
+                            for x in mini_df.rows(named=True)}
+            for name in tqdm(batch_names):
+                prot = data[f"{name}.pdb"]
+                domain_bounds = name2domains[name]
+                prot.domains = np.zeros_like(prot.ss, dtype=np.int8)
+                prot.domains -= 1
+                if domain_bounds is None:
+                    continue
+                for d_idx, domain in enumerate(domain_bounds.split(',')):
+                    for sep in domain.split('_'):
+                        prot.domains[int(sep.split('-')[0]):int(sep.split('-')[1])] = d_idx
+                data[f"{name}.pdb"] = prot
+            pickle.dump(data, open(f'afdb_sp_v4_prots/{batch_idx}.pckl', 'wb'))
+
+    else:
+        data = pickle.load(open(f'afdb_sp_v4_prots/{batch_idx}.pckl', 'rb'))
+        print('Computing batch: ', batch_idx, ' out of: ',
+              (len(names) // batch_size) + 1)
+        try:
+            batch_names = names[batch_idx:(batch_idx+batch_size)]
+        except KeyError:
+            batch_names = names[batch_idx:-1]
+        mini_df = df.filter(pl.col('ID').str.contains_any(batch_names))
+        print(len(mini_df))
+        name2domains = {x["ID"]: x["domain_boundaries"]
+                        for x in mini_df.rows(named=True)}
+        for name in tqdm(batch_names):
+            if name not in name2domains:
+                continue
+            prot = data[f"{name}.pdb"]
+            domain_bounds = name2domains[name]
+            prot.domains = np.zeros_like(prot.ss, dtype=np.int8)
+            prot.domains -= 1
+            if domain_bounds == "NULL":
+                continue
+            for d_idx, domain in enumerate(domain_bounds.split(',')):
+                for sep in domain.split('_'):
+                    prot.domains[int(sep.split('-')[0]):int(sep.split('-')[1])] = d_idx
+            data[f"{name}.pdb"] = prot
+        pickle.dump(data, open(f'afdb_sp_v4_prots/{batch_idx}.pckl', 'wb'))
 
 if __name__ == '__main__':
     import typer
